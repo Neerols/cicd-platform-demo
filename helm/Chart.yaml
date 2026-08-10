@@ -1,6 +1,0 @@
-apiVersion: v2
-name: cicd-platform-demo
-description: Helm chart for cicd-platform-demo test service
-type: application
-version: 0.1.0
-appVersion: "0.1.0"
