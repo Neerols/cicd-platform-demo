@@ -1,0 +1,12 @@
+# .gitlab-ci.yml for cicd-platform-demo
+# Mirrors examples/consumer-gitlab-ci.yml + deploy from Neerols/cicd-platform,
+# targeting a Kubernetes cluster via the platform's built-in Helm chart
+# (helm/generic-deployment), deployed through the jobs/helm_deploy.yml component.
+
+include:
+  - project: 'ffinpay/cicd/cicd-platform'   # replace with your actual GitLab project path
+    ref: master
+    file: '/templates/maven-service-java-21.yml'
+    inputs:
+      debug: "false"
+      stages: [build, test, release, deploy]

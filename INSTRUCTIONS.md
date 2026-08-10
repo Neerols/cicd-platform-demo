@@ -1,50 +1,64 @@
 # How to use this demo with cicd-platform
 
-This repo is a minimal Flask service meant to exercise your `Neerols/cicd-platform`
-GitLab CI pipeline templates end-to-end: build, test, package, and deploy to Kubernetes via Helm.
+This repo mirrors the real structure `Neerols/cicd-platform` expects for a
+Maven/Java service, so you can push it into GitLab and run the full
+build → test → release → deploy pipeline against a Kubernetes cluster via Helm.
 
 ## What's inside
 
-- `app/` — Flask app with `/`, `/health`, `/version`, `/fail` endpoints.
-- `tests/test_health.py` — pytest unit tests for the app.
-- `Dockerfile` — builds a small non-root container image, runs via gunicorn on port 8080.
-- `docker-compose.yml` — optional local run/fallback, not required for Helm deploy.
-- `helm/` — Helm chart with Deployment, Service, optional Ingress, liveness/readiness
-  probes on `/health`, resource limits, and `APP_VERSION`/`PORT` env vars driven by `values.yaml`.
-- `.gitlab-ci.yml.example` — placeholder stages; replace with an `include:` of your
-  actual `cicd-platform` pipeline file and its expected variables.
+- `pom.xml` — Spring Boot 3 / Java 21 Maven project. Uses `revision`/`changelist`
+  properties the same way `jobs/build_maven_project.yml` sets them
+  (`-Drevision=${APP_VERSION_SHORT} -Dchangelist=-${CI_COMMIT_SHORT_SHA}`).
+- `src/main/java/...` — minimal REST controller with `/`, `/version`, plus Spring
+  Boot Actuator exposing `/actuator/health` (liveness/readiness probes).
+- `src/test/java/...` — JUnit 5 tests hitting `/`, `/version`, `/actuator/health`.
+- `Dockerfile` — copies the built jar (`target/cicd-platform-demo.jar`, matching
+  `finalName` in `pom.xml`) into a slim JRE image, matches what
+  `jobs/release_image.yml` (kaniko) expects: a `Dockerfile` at repo root, context `.`.
+- `.gitlab-ci.yml` — real pipeline entry point, just an `include:` of
+  `templates/maven-service-java-21.yml` from `cicd-platform`, same pattern as
+  `examples/consumer-gitlab-ci.yml`.
 
-## Steps to wire it into your real pipeline
+No custom Helm chart is included here on purpose: `cicd-platform`'s
+`jobs/helm_deploy.yml` already deploys every consumer service using its own
+built-in chart at `helm/generic-deployment` (passthrough `env`, `volumes`,
+`extraContainers`, etc. via `extra_values_yaml`), setting `--set image=<built image>`
+automatically. You don't need a chart in the service repo unless you want to
+override something with `extra_values_yaml`.
 
-1. In GitLab, import or mirror this GitHub repo (or push it as a mirror) into a project
-   in your GitLab instance where `cicd-platform` runners/templates are available.
-2. Rename `.gitlab-ci.yml.example` to `.gitlab-ci.yml` and replace its contents with the
-   `include:` for your platform (e.g. the consumer or two-releases example from
-   `Neerols/cicd-platform`).
-3. Set the CI/CD variables your platform expects for a Helm/Kubernetes deploy, typically:
-   - `KUBE_CONTEXT` / kubeconfig or service account credentials for the target cluster
-   - `HELM_CHART_PATH=helm`
-   - `HELM_RELEASE_NAME=cicd-platform-demo`
-   - `K8S_NAMESPACE` for the target namespace
-   - `IMAGE_TAG` (e.g. `$CI_COMMIT_SHORT_SHA`)
-   - Container registry variables if your platform pushes to an external registry rather
-     than the built-in GitLab Container Registry.
-4. Confirm build stage produces and pushes an image tagged consistently with what
-   `helm/values.yaml` (`image.repository`/`image.tag`) expects, or override them via
-   `--set image.tag=$IMAGE_TAG` / `--set image.repository=...` in the deploy job.
-5. Run the pipeline. Expected flow:
-   - Build: Docker image built from `Dockerfile`.
-   - Test: `pip install -r requirements-dev.txt && pytest` runs the 4 tests in `tests/`.
-   - Package: image pushed to registry.
-   - Deploy: `helm upgrade --install cicd-platform-demo ./helm -n <namespace> --set image.tag=<tag>`.
-6. Smoke test after deploy: `curl http://<service-or-ingress-host>/health` should return
-   `{"status": "ok"}` with HTTP 200. `/version` should reflect `APP_VERSION` set for that release.
-7. To test rollback/failure handling in your platform, point a smoke test or synthetic
-   check at `/fail` (returns HTTP 500) and see how the pipeline reacts.
+## Steps to run it
+
+1. Push/import this repo into your GitLab instance (or add it as a remote and
+   `git push` to a new GitLab project) where `cicd-platform` and its shared
+   runners are available.
+2. In `.gitlab-ci.yml`, fix the `include.project` path to the real path of
+   `cicd-platform` in your GitLab group (currently a placeholder
+   `ffinpay/cicd/cicd-platform`, matching what's used in the platform's own
+   `examples/consumer-gitlab-ci.yml`).
+3. Make sure your project has access to whatever registry/cluster credentials
+   `cicd-platform`'s blocks (`.registry_auth`, `.kaniko_auth`, `.k8s_set_context`)
+   expect — these come from group/instance-level CI/CD variables already wired
+   into the platform, not from this demo repo.
+4. Run the pipeline. Stages from `templates/maven-service-java-21.yml`:
+   - `collect-metadata` — computes `APP_VERSION`/`APP_VERSION_SHORT`.
+   - `build-binary` — `mvn package` with `-Drevision`/`-Dchangelist`, produces
+     `target/cicd-platform-demo.jar`.
+   - `sonar-scan` (if enabled upstream).
+   - `release-image` — kaniko builds `Dockerfile` and pushes
+     `${IMAGE_NAME}:${APP_VERSION}` (and `:latest` on tags).
+   - `deploy-k8s-dev` / `deploy-k8s-test` / `deploy-k8s-prod` —
+     `helm upgrade --install` against `helm/generic-deployment`, `dev` runs
+     automatically, `test`/`prod` are manual by default (see `jobs/helm_deploy.yml`).
+5. After deploy, smoke test the Kubernetes service: port-forward or hit the
+   ingress, then `curl http://<host>/actuator/health` should return `{"status":"UP"}`
+   and `curl http://<host>/version` should reflect the `APP_VERSION` set by the
+   pipeline (passed as the `APP_VERSION` env var, matching `application.yml`).
 
 ## Notes
 
-- No secrets or real registry/cluster values are included — replace the placeholders
-  in `helm/values.yaml` (`image.repository`, `ingress.host`) with your real values.
-- The Helm chart is intentionally simple (Deployment + Service + optional Ingress) so
-  it's easy to see exactly what each pipeline stage changed.
+- No secrets, cluster names, or registry paths are hardcoded here — they all
+  come from `cicd-platform`'s own variables and your GitLab project settings.
+- If you need extra env vars, volumes, or a sidecar for this demo service, pass
+  them via `extra_values_yaml` on the `helm_deploy` job inputs in
+  `.gitlab-ci.yml`, following the examples in `cicd-platform`'s
+  `examples/multi-cert-gitlab-ci.yml` and `examples/sidecar-container-gitlab-ci.yml`.

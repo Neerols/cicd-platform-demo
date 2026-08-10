@@ -1,24 +1,26 @@
 # cicd-platform-demo
 
-Minimal Flask service used to test [Neerols/cicd-platform](https://github.com/Neerols/cicd-platform)
-GitLab CI pipelines end-to-end: build → test → package → deploy to Kubernetes via Helm.
+Minimal Maven/Spring Boot service used to test
+[Neerols/cicd-platform](https://github.com/Neerols/cicd-platform) GitLab CI
+pipelines end-to-end: build → test → release (Docker image via kaniko) →
+deploy to Kubernetes via the platform's built-in Helm chart.
 
-See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for how to wire this into your real `.gitlab-ci.yml`.
+See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for how to wire this into your real
+GitLab project.
 
 ## Quick local run
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
-docker compose up --build
-curl http://localhost:8080/health
+mvn package
+java -jar target/cicd-platform-demo.jar
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/version
 ```
 
-## Helm (manual, without CI)
+## Local Docker build
 
 ```bash
-helm upgrade --install cicd-platform-demo ./helm \
-  -n cicd-platform-demo --create-namespace \
-  --set image.repository=<your-registry>/cicd-platform-demo \
-  --set image.tag=<tag>
+mvn package
+docker build -t cicd-platform-demo:local .
+docker run --rm -p 8080:8080 -e APP_VERSION=local cicd-platform-demo:local
 ```
