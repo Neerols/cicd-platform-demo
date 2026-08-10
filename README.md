@@ -1,14 +1,13 @@
 # cicd-platform-demo
 
-Minimal Maven/Spring Boot service used to test
-[Neerols/cicd-platform](https://github.com/Neerols/cicd-platform) GitLab CI
-pipelines end-to-end: build → test → release (Docker image via kaniko) →
-deploy to Kubernetes via the platform's built-in Helm chart.
+Минимальный Maven/Spring Boot сервис для тестирования GitLab CI пайплайнов
+[Neerols/cicd-platform](https://github.com/Neerols/cicd-platform) от начала до конца:
+build → test → release (Docker-образ через kaniko) → деплой в Kubernetes
+через встроенный Helm chart платформы.
 
-See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for how to wire this into your real
-GitLab project.
+Как подключить это к своему реальному GitLab-проекту — см. [INSTRUCTIONS.md](./INSTRUCTIONS.md).
 
-## Quick local run
+## Быстрый запуск локально
 
 ```bash
 mvn package
@@ -17,7 +16,7 @@ curl http://localhost:8080/actuator/health
 curl http://localhost:8080/version
 ```
 
-## Local Docker build
+## Локальная сборка в Docker
 
 ```bash
 mvn package
