@@ -1,64 +1,66 @@
-# How to use this demo with cicd-platform
+# Как использовать это демо с cicd-platform
 
-This repo mirrors the real structure `Neerols/cicd-platform` expects for a
-Maven/Java service, so you can push it into GitLab and run the full
-build → test → release → deploy pipeline against a Kubernetes cluster via Helm.
+Этот репозиторий повторяет структуру, которую `Neerols/cicd-platform` ожидает
+от Maven/Java-сервиса, поэтому его можно запушить в GitLab и прогнать полный
+пайплайн build → test → release → deploy в Kubernetes-кластер через Helm.
 
-## What's inside
+## Что внутри
 
-- `pom.xml` — Spring Boot 3 / Java 21 Maven project. Uses `revision`/`changelist`
-  properties the same way `jobs/build_maven_project.yml` sets them
+- `pom.xml` — Maven-проект на Spring Boot 3 / Java 21. Использует свойства
+  `revision`/`changelist` так же, как их подставляет `jobs/build_maven_project.yml`
   (`-Drevision=${APP_VERSION_SHORT} -Dchangelist=-${CI_COMMIT_SHORT_SHA}`).
-- `src/main/java/...` — minimal REST controller with `/`, `/version`, plus Spring
-  Boot Actuator exposing `/actuator/health` (liveness/readiness probes).
-- `src/test/java/...` — JUnit 5 tests hitting `/`, `/version`, `/actuator/health`.
-- `Dockerfile` — copies the built jar (`target/cicd-platform-demo.jar`, matching
-  `finalName` in `pom.xml`) into a slim JRE image, matches what
-  `jobs/release_image.yml` (kaniko) expects: a `Dockerfile` at repo root, context `.`.
-- `.gitlab-ci.yml` — real pipeline entry point, just an `include:` of
-  `templates/maven-service-java-21.yml` from `cicd-platform`, same pattern as
-  `examples/consumer-gitlab-ci.yml`.
+- `src/main/java/...` — минимальный REST-контроллер с `/`, `/version`, а также
+  Spring Boot Actuator, который отдаёт `/actuator/health` (liveness/readiness пробы).
+- `src/test/java/...` — тесты на JUnit 5 для `/`, `/version`, `/actuator/health`.
+- `Dockerfile` — копирует собранный jar (`target/cicd-platform-demo.jar`,
+  совпадает с `finalName` в `pom.xml`) в лёгкий JRE-образ; соответствует тому,
+  что ожидает `jobs/release_image.yml` (kaniko): `Dockerfile` в корне репозитория, context `.`.
+- `.gitlab-ci.yml` — реальная точка входа пайплайна, просто `include:`
+  темплейта `templates/maven-service-java-21.yml` из `cicd-platform`, по тому же
+  паттерну, что и `examples/consumer-gitlab-ci.yml`.
 
-No custom Helm chart is included here on purpose: `cicd-platform`'s
-`jobs/helm_deploy.yml` already deploys every consumer service using its own
-built-in chart at `helm/generic-deployment` (passthrough `env`, `volumes`,
-`extraContainers`, etc. via `extra_values_yaml`), setting `--set image=<built image>`
-automatically. You don't need a chart in the service repo unless you want to
-override something with `extra_values_yaml`.
+Своего Helm chart здесь намеренно нет: `jobs/helm_deploy.yml` в `cicd-platform`
+уже деплоит любой сервис-потребитель через встроенный chart
+`helm/generic-deployment` (сквозная передача `env`, `volumes`, `extraContainers`
+и т.д. через `extra_values_yaml`), сам подставляя `--set image=<собранный образ>`.
+Свой chart в репозитории сервиса нужен только если ты хочешь что-то переопределить
+через `extra_values_yaml`.
 
-## Steps to run it
+## Шаги запуска
 
-1. Push/import this repo into your GitLab instance (or add it as a remote and
-   `git push` to a new GitLab project) where `cicd-platform` and its shared
-   runners are available.
-2. In `.gitlab-ci.yml`, fix the `include.project` path to the real path of
-   `cicd-platform` in your GitLab group (currently a placeholder
-   `ffinpay/cicd/cicd-platform`, matching what's used in the platform's own
-   `examples/consumer-gitlab-ci.yml`).
-3. Make sure your project has access to whatever registry/cluster credentials
-   `cicd-platform`'s blocks (`.registry_auth`, `.kaniko_auth`, `.k8s_set_context`)
-   expect — these come from group/instance-level CI/CD variables already wired
-   into the platform, not from this demo repo.
-4. Run the pipeline. Stages from `templates/maven-service-java-21.yml`:
-   - `collect-metadata` — computes `APP_VERSION`/`APP_VERSION_SHORT`.
-   - `build-binary` — `mvn package` with `-Drevision`/`-Dchangelist`, produces
+1. Запушь/импортируй этот репозиторий в свой GitLab (или добавь его как remote
+   и сделай `git push` в новый проект GitLab), где доступны `cicd-platform` и
+   его shared runner'ы.
+2. В `.gitlab-ci.yml` поправь путь `include.project` на реальный путь
+   `cicd-platform` в твоей GitLab-группе (сейчас там плейсхолдер
+   `ffinpay/cicd/cicd-platform`, взятый из `examples/consumer-gitlab-ci.yml`
+   самой платформы).
+3. Убедись, что у проекта есть доступ к тем credentials registry/кластера,
+   которые ожидают блоки `cicd-platform` (`.registry_auth`, `.kaniko_auth`,
+   `.k8s_set_context`) — они приходят из групповых/инстанс-уровневых CI/CD
+   переменных, уже настроенных в самой платформе, а не из этого demo-репозитория.
+4. Запусти пайплайн. Стадии из `templates/maven-service-java-21.yml`:
+   - `collect-metadata` — вычисляет `APP_VERSION`/`APP_VERSION_SHORT`.
+   - `build-binary` — `mvn package` с `-Drevision`/`-Dchangelist`, собирает
      `target/cicd-platform-demo.jar`.
-   - `sonar-scan` (if enabled upstream).
-   - `release-image` — kaniko builds `Dockerfile` and pushes
-     `${IMAGE_NAME}:${APP_VERSION}` (and `:latest` on tags).
+   - `sonar-scan` (если включён выше по пайплайну).
+   - `release-image` — kaniko собирает `Dockerfile` и пушит
+     `${IMAGE_NAME}:${APP_VERSION}` (и `:latest` на тегах).
    - `deploy-k8s-dev` / `deploy-k8s-test` / `deploy-k8s-prod` —
-     `helm upgrade --install` against `helm/generic-deployment`, `dev` runs
-     automatically, `test`/`prod` are manual by default (see `jobs/helm_deploy.yml`).
-5. After deploy, smoke test the Kubernetes service: port-forward or hit the
-   ingress, then `curl http://<host>/actuator/health` should return `{"status":"UP"}`
-   and `curl http://<host>/version` should reflect the `APP_VERSION` set by the
-   pipeline (passed as the `APP_VERSION` env var, matching `application.yml`).
+     `helm upgrade --install` в `helm/generic-deployment`; `dev` разворачивается
+     автоматически, `test`/`prod` по умолчанию manual (см. `jobs/helm_deploy.yml`).
+5. После деплоя сделай smoke-test Kubernetes-сервиса: через port-forward или
+   ingress выполни `curl http://<host>/actuator/health` — должен вернуться
+   `{"status":"UP"}`, а `curl http://<host>/version` должен отражать
+   `APP_VERSION`, который пайплайн передал (через переменную окружения
+   `APP_VERSION`, см. `application.yml`).
 
-## Notes
+## Заметки
 
-- No secrets, cluster names, or registry paths are hardcoded here — they all
-  come from `cicd-platform`'s own variables and your GitLab project settings.
-- If you need extra env vars, volumes, or a sidecar for this demo service, pass
-  them via `extra_values_yaml` on the `helm_deploy` job inputs in
-  `.gitlab-ci.yml`, following the examples in `cicd-platform`'s
-  `examples/multi-cert-gitlab-ci.yml` and `examples/sidecar-container-gitlab-ci.yml`.
+- Здесь нет захардкоженных секретов, имён кластеров или путей registry — всё
+  берётся из переменных самой `cicd-platform` и настроек твоего GitLab-проекта.
+- Если для этого демо-сервиса нужны дополнительные env-переменные, volumes или
+  sidecar-контейнер, передай их через `extra_values_yaml` в inputs job'а
+  `helm_deploy` в `.gitlab-ci.yml`, по аналогии с примерами
+  `examples/multi-cert-gitlab-ci.yml` и `examples/sidecar-container-gitlab-ci.yml`
+  из `cicd-platform`.
