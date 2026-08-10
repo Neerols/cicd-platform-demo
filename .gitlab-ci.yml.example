@@ -1,0 +1,20 @@
+# Example placeholder — replace with an `include:` of your real cicd-platform pipeline.
+# Kept here only so this repo has a valid entry point until you wire in your own
+# .gitlab-ci.yml from Neerols/cicd-platform (consumer / two-releases example).
+#
+# include:
+#   - project: 'Neerols/cicd-platform'
+#     ref: main
+#     file: 'examples/consumer-gitlab-ci.yml'
+#
+# variables:
+#   APP_NAME: cicd-platform-demo
+#   HELM_CHART_PATH: helm
+#   HELM_RELEASE_NAME: cicd-platform-demo
+#   K8S_NAMESPACE: cicd-platform-demo
+#   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+stages:
+  - build
+  - test
+  - package
+  - deploy
